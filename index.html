@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>WebOS — Demo</title>
+<style>
+  :root{
+    --bg-1:#071229; --bg-2:#0b2240; --card:#0f1a2a; --muted:#9fb0c8; --accent:#4da3ff;
+    --win:#031224; --glass:rgba(255,255,255,0.03);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;font-family:Inter, system-ui, Arial, sans-serif;background:linear-gradient(180deg,var(--bg-1),var(--bg-2));color:#eaf6ff}
+  .app{min-height:100%;display:flex;align-items:center;justify-content:center;padding:20px}
+  .screen{width:980px;height:620px;border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.6);background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.06));position:relative;overflow:hidden}
+  @media (max-width:520px){ .screen{width:360px;height:720px;border-radius:24px} }
+
+  /* views */
+  .view{position:absolute;inset:0;padding:28px;display:none}
+  .view.active{display:block}
+
+  /* registration/login */
+  .card{max-width:480px;margin:40px auto;background:var(--glass);padding:20px;border-radius:12px}
+  label{display:block;margin-bottom:6px;color:var(--muted);font-size:13px}
+  input,select,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);background:transparent;color:inherit;margin-bottom:10px}
+  button{padding:10px 14px;border-radius:10px;border:0;background:linear-gradient(90deg,var(--accent),#6ecbff);color:#012;cursor:pointer}
+
+  /* lock screen */
+  .lock-center{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%}
+  .clock{font-weight:700;font-size:68px;letter-spacing:1px}
+  .subclock{font-size:14px;color:var(--muted)}
+
+  /* desktop/home */
+  .desktop{display:flex;flex-direction:column;height:100%}
+  .topbar{display:flex;align-items:center;justify-content:space-between}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:18px}
+  .appcard{background:var(--glass);padding:14px;border-radius:12px;text-align:center;cursor:pointer;user-select:none;position:relative}
+  .ico{width:60px;height:60px;border-radius:14px;background:linear-gradient(135deg,#fff2,#0002);display:inline-flex;align-items:center;justify-content:center;font-weight:700}
+
+  /* windows */
+  .window{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:640px;height:420px;background:var(--win);border-radius:12px;padding:10px;box-shadow:0 30px 80px rgba(0,0,0,0.7);display:none;color:#cfe9ff}
+  .window.show{display:block}
+  @media (max-width:520px){ .window{width:320px;height:520px} }
+
+  /* window header with close button */
+  .win-header{display:flex;justify-content:flex-end;align-items:center;height:42px;padding:6px;border-bottom:1px solid rgba(255,255,255,0.02)}
+  .close-btn{
+    width:36px;height:36px;border-radius:8px;background:rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:center;cursor:pointer;
+    transition: transform 0.22s ease, background-color 0.28s ease, box-shadow 0.22s ease;
+    color:#ffdfe0;font-weight:700;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+  /* hover animation -> go red and scale (only visible on desktop via JS/CSS class) */
+  .close-btn:hover{ background:#ff4d4d; transform:scale(1.06) rotate(8deg); box-shadow:0 8px 20px rgba(255,77,77,0.2) }
+
+  /* hide close button on small screens via CSS fallback */
+  @media (max-width:768px){ .close-btn{display:none !important} }
+
+  /* notes, admin etc */
+  .muted{color:var(--muted)}
+  .row{display:flex;gap:10px;align-items:center}
+  .note{background:rgba(255,255,255,0.02);padding:10px;margin-bottom:8px;border-radius:8px}
+
+  /* phone nav (visible on small screens) */
+  .phone-nav{position:absolute;left:0;right:0;bottom:0;height:64px;background:rgba(0,0,0,0.35);display:none;align-items:center;justify-content:space-around;padding:8px}
+  .phone-nav .btn{width:56px;height:40px;border-radius:8px;background:rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:center;cursor:pointer}
+  @media (max-width:768px){ .phone-nav{display:flex} .screen{height:calc(100vh - 0px);} }
+
+  /* desktop taskbar (only on desktop) */
+  .taskbar{position:absolute;left:0;right:0;bottom:0;height:56px;background:rgba(0,0,0,0.25);display:flex;align-items:center;padding:6px;gap:10px}
+  .taskbar .task{width:44px;height:44px;border-radius:8px;background:rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:center;cursor:pointer}
+  @media (max-width:768px){ .taskbar{display:none} }
+
+  /* small helpers */
+  .settings-menu{width:180px;background:rgba(255,255,255,0.02);padding:8px;border-radius:8px}
+  .settings-panel{flex:1;background:rgba(255,255,255,0.02);padding:10px;border-radius:8px}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="screen" id="screen">
+
+    <!-- Registration -->
+    <div class="view active" id="view-register">
+      <div class="card">
+        <h2>Регистрация</h2>
+        <label>Имя</label><input id="reg-name" type="text" placeholder="Имя">
+        <label>Пароль</label><input id="reg-pass" type="password" placeholder="Пароль">
+        <label>Аватар (цвет)</label>
+        <select id="reg-avatar">
+          <option value="#4da3ff">Синий</option>
+          <option value="#ff9f43">Оранжевый</option>
+          <option value="#9b59b6">Фиолетовый</option>
+          <option value="#2ecc71">Зелёный</option>
+          <option value="#e74c3c">Красный</option>
+        </select>
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <div class="muted">Есть аккаунт? <a href="#" id="to-login">Войти</a></div>
+          <button id="do-register">Зарегистрироваться</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Login -->
+    <div class="view" id="view-login">
+      <div class="card">
+        <h2>Вход</h2>
+        <label>Имя</label><input id="login-name" type="text" placeholder="Имя">
+        <label>Пароль</label><input id="login-pass" type="password" placeholder="Пароль">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <div class="muted">Нет аккаунта? <a href="#" id="to-reg">Регистрация</a></div>
+          <button id="do-login">Войти</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lock -->
+    <div class="view" id="view-lock">
+      <div class="lock-center">
+        <div style="text-align:center">
+          <div class="clock" id="lock-time">--:--</div>
+          <div class="subclock" id="lock-date">--</div>
+          <div style="margin-top:12px" class="muted">Устройство: <strong id="device-type">ПК</strong></div>
+        </div>
+
+        <div style="margin-top:22px;width:320px;max-width:90%">
+          <button id="unlock-btn" class="">Разблокировать</button>
+          <div style="height:10px"></div>
+          <button id="enter-pass" style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:inherit">Ввести пароль</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Password modal -->
+    <div class="window" id="win-pass">
+      <div class="win-header"><div style="flex:1"></div><!-- close not needed for pass modal --></div>
+      <h3>Введите пароль</h3>
+      <input id="prompt-pass" type="password" placeholder="Пароль">
+      <div style="margin-top:10px" class="row"><button id="ok-pass">ОК</button><button id="cancel-pass">Отмена</button></div>
+    </div>
+
+    <!-- Home -->
+    <div class="view" id="view-home">
+      <div class="desktop">
+        <div class="topbar">
+          <div>
+            <div class="clock" id="home-time">--:--</div>
+            <div class="subclock" id="home-date">--</div>
+          </div>
+          <div class="row" style="align-items:center">
+            <div id="user-avatar" style="width:48px;height:48px;border-radius:50%;background:#4da3ff"></div>
+            <div style="margin-left:10px">
+              <div id="user-name">Гость</div>
+              <div class="muted" id="user-status">Онлайн</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid" id="home-grid" style="margin-top:18px">
+          <div class="appcard" data-app="calculator"><div class="ico">C</div><div>Калькулятор</div></div>
+          <div class="appcard" data-app="settings"><div class="ico">S</div><div>Настройки</div></div>
+          <div class="appcard" data-app="store"><div class="ico">🛒</div><div>Магазин</div></div>
+          <div class="appcard" data-app="admin"><div class="ico">A</div><div>Админ</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Calculator Window -->
+    <div class="window" id="win-calc">
+      <div class="win-header"><div style="flex:1"></div><div class="close-btn" data-win="win-calc" title="Закрыть">✕</div></div>
+      <h3>Калькулятор</h3>
+      <input id="calc-display" readonly style="padding:10px;border-radius:8px;border:0;background:#052034;color:#dff;margin-bottom:8px">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+        <button class="btn-calc">7</button><button class="btn-calc">8</button><button class="btn-calc">9</button><button class="btn-calc">/</button>
+        <button class="btn-calc">4</button><button class="btn-calc">5</button><button class="btn-calc">6</button><button class="btn-calc">*</button>
+        <button class="btn-calc">1</button><button class="btn-calc">2</button><button class="btn-calc">3</button><button class="btn-calc">-</button>
+        <button class="btn-calc">0</button><button class="btn-calc">.</button><button id="calc-eq" class="btn-calc">=</button><button class="btn-calc">+</button>
+      </div>
+    </div>
+
+    <!-- Settings Window -->
+    <div class="window" id="win-settings">
+      <div class="win-header"><div style="flex:1"></div><div class="close-btn" data-win="win-settings" title="Закрыть">✕</div></div>
+      <h3>Настройки</h3>
+      <div style="display:flex;gap:12px;height:330px">
+        <div class="settings-menu">
+          <div class="muted" style="margin-bottom:8px">Разделы</div>
+          <div><button class="menu-btn" data-section="account">Аккаунт</button></div>
+          <div><button class="menu-btn" data-section="updates">Обновления</button></div>
+          <div><button class="menu-btn" data-section="walls">Обои</button></div>
+          <div><button class="menu-btn" data-section="system">Системная папка</button></div>
+          <div style="margin-top:8px"><button class="menu-btn" data-section="password">Пароль</button></div>
+        </div>
+        <div class="settings-panel" id="settings-content">Выберите раздел</div>
+      </div>
+    </div>
+
+    <!-- Store Window -->
+    <div class="window" id="win-store">
+      <div class="win-header"><div style="flex:1"></div><div class="close-btn" data-win="win-store" title="Закрыть">✕</div></div>
+      <h3>Магазин приложений</h3>
+      <div style="display:flex;gap:12px;height:330px">
+        <div style="flex:1;display:flex;flex-direction:column">
+          <div class="muted">Доступные приложения</div>
+          <div style="flex:1;overflow:auto;margin-top:8px" id="store-list"></div>
+        </div>
+        <div style="width:220px;background:rgba(255,255,255,0.02);padding:10px;border-radius:8px">
+          <div class="muted">Установленные</div>
+          <div id="installed-list" style="margin-top:8px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Admin Window -->
+    <div class="window" id="win-admin">
+      <div class="win-header"><div style="flex:1"></div><div class="close-btn" data-win="win-admin" title="Закрыть">✕</div></div>
+      <h3>Админ панель</h3>
+      <div style="display:flex;gap:12px;height:330px">
+        <div style="flex:1;overflow:auto" id="admin-accounts"></div>
+        <div style="width:260px;background:rgba(255,255,255,0.02);padding:10px;border-radius:8px">
+          <div class="muted">Пароль админа</div>
+          <input id="admin-pass" placeholder="Новый пароль (оставь пустым чтобы не менять)" type="password">
+          <div style="height:8px"></div>
+          <button id="save-admin-pass">Сохранить</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notes Window -->
+    <div class="window" id="win-notes">
+      <div class="win-header"><div style="flex:1"></div><div class="close-btn" data-win="win-notes" title="Закрыть">✕</div></div>
+      <h3>Заметки</h3>
+      <div style="display:flex;gap:10px;height:320px">
+        <div style="width:220px;background:rgba(255,255,255,0.02);padding:8px;border-radius:8px">
+          <div class="muted">Список</div>
+          <div id="notes-list" style="margin-top:8px;max-height:240px;overflow:auto"></div>
+          <button id="new-note" style="margin-top:8px">Новая заметка</button>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column">
+          <input id="note-title" placeholder="Заголовок" style="padding:8px;border-radius:8px;border:0;background:#021224;color:#cff;margin-bottom:8px">
+          <textarea id="note-body" style="flex:1;padding:8px;border-radius:8px;border:0;background:#021224;color:#cff"></textarea>
+          <div style="display:flex;justify-content:flex-end;margin-top:8px"><button id="save-note">Сохранить</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Phone nav -->
+    <div class="phone-nav" id="phone-nav">
+      <div class="btn" id="phone-back">◀</div>
+      <div class="btn" id="phone-home">◯</div>
+      <div class="btn" id="phone-recent">▦</div>
+    </div>
+
+    <!-- Desktop taskbar -->
+    <div class="taskbar" id="taskbar"></div>
+
+  </div>
+</div>
+
+<script>
+/* ============================
+   Utilities & Storage helpers
+   ============================ */
+const utils = {
+  str2ab: s => new TextEncoder().encode(s),
+  ab2hex: buf => Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join(''),
+  hex2ab: hex => new Uint8Array(hex.match(/.{1,2}/g).map(h=>parseInt(h,16))).buffer,
+  randHex: (n)=>{ const b=new Uint8Array(n); crypto.getRandomValues(b); return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join('') }
+};
+
+// crypto hash (SHA-256) with fallback to simple djb2 if unavailable
+async function sha256Hex(str){
+  if(window.crypto && crypto.subtle && typeof crypto.subtle.digest === 'function'){
+    const buf = await crypto.subtle.digest('SHA-256', utils.str2ab(str));
+    return utils.ab2hex(buf);
+  } else { // fallback (NOT cryptographically secure)
+    let h = 5381; for(let i=0;i<str.length;i++){ h = ((h<<5)+h) + str.charCodeAt(i); h = h & 0xffffffff }
+    return String(h>>>0);
+  }
+}
+
+/* Database wrapper */
+const DB = {
+  get users(){ return JSON.parse(localStorage.getItem('webos_users_v3')||'[]') },
+  set users(v){ localStorage.setItem('webos_users_v3', JSON.stringify(v)) },
+  get session(){ return JSON.parse(localStorage.getItem('webos_session_v3')||'null') },
+  set session(v){ localStorage.setItem('webos_session_v3', JSON.stringify(v)) },
+  get adminHash(){ return localStorage.getItem('webos_admin_hash_v3') || null },
+  set adminHash(v){ localStorage.setItem('webos_admin_hash_v3', v) },
+  get installed(){ return JSON.parse(localStorage.getItem('webos_installed_v3')||'[]') },
+  set installed(a){ localStorage.setItem('webos_installed_v3', JSON.stringify(a)) }
+};
+
+/* init default admin password (hashed 'admin') */
+(async ()=>{ if(!DB.adminHash){ DB.adminHash = await sha256Hex('admin') } })();
+
+/* helpers */
+const $ = id => document.getElementById(id);
+const isMobile = ()=> window.innerWidth <= 768;
+function showView(id){ document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); $(id).classList.add('active') }
+function showWindow(id){ document.querySelectorAll('.window').forEach(w=>w.classList.remove('show')); $(id).classList.add('show'); updateTaskbar() }
+function closeWindow(id){ $(id).classList.remove('show'); updateTaskbar() }
+
+/* device text */
+$('device-type').textContent = isMobile() ? 'Телефон' : 'ПК';
+window.addEventListener('resize', ()=> $('device-type').textContent = isMobile() ? 'Телефон' : 'ПК');
+
+/* ===============
+   Time management
+   =============== */
+function updateTime(){
+  const d = new Date(); const hh = String(d.getHours()).padStart(2,'0'); const mm=String(d.getMinutes()).padStart(2,'0');
+  $('lock-time').textContent = `${hh}:${mm}`; $('home-time').textContent = `${hh}:${mm}`; $('lock-date').textContent = d.toLocaleString(); $('home-date').textContent = d.toLocaleDateString();
+}
+updateTime(); setInterval(updateTime,1000);
+
+/* ======================
+   User / Registration
+   ====================== */
+function findUserByName(name){ return DB.users.find(u=>u.name===name) }
+function currentUser(){ const s = DB.session; if(!s) return null; return DB.users.find(u=>u.id===s.id) }
+
+async function createUser(name, pass, color){
+  const salt = utils.randHex(8);
+  const passHash = await sha256Hex(pass + salt);
+  const id = Date.now();
+  const users = DB.users;
+  users.push({id,name,passHash,salt,color,bannedUntil:null,failedAttempts:0,lockUntil:null});
+  DB.users = users;
+  // init empty notes per user
+  localStorage.setItem('notes_'+id, JSON.stringify([]));
+  DB.session = {id};
+}
+
+$('do-register').addEventListener('click', async ()=>{
+  const name = $('reg-name').value.trim(); const pass = $('reg-pass').value; const color = $('reg-avatar').value;
+  if(!name || !pass){ alert('Введите имя и пароль'); return; }
+  if(findUserByName(name)){ alert('Имя уже занято'); return; }
+  await createUser(name,pass,color); renderUser(); showView('view-lock');
+});
+
+/* login */
+$('to-reg').addEventListener('click', ()=> showView('view-register'));
+$('to-login').addEventListener('click', ()=> showView('view-login'));
+
+$('do-login').addEventListener('click', async ()=>{
+  const name = $('login-name').value.trim(); const pass = $('login-pass').value;
+  const u = findUserByName(name);
+  if(!u){ alert('Неверные данные'); return; }
+  const now = Date.now();
+  if(u.lockUntil && now < u.lockUntil){ alert('Аккаунт временно заблокирован'); return; }
+  const tryHash = await sha256Hex(pass + u.salt);
+  if(tryHash !== u.passHash){
+    u.failedAttempts = (u.failedAttempts||0) + 1;
+    if(u.failedAttempts >= 5){ u.lockUntil = Date.now() + 5*60*1000; u.failedAttempts = 0; alert('Слишком много попыток. Аккаунт заблокирован на 5 минут'); }
+    else alert('Неверные данные');
+    DB.users = DB.users.map(x=>x.id===u.id?u:x);
+    return;
+  }
+  u.failedAttempts = 0; u.lockUntil = null; DB.users = DB.users.map(x=>x.id===u.id?u:x);
+  DB.session = {id: u.id}; renderUser(); showView('view-lock');
+});
+
+/* logout, delete user */
+function logout(){ DB.session = null; showView('view-login') }
+function deleteCurrentUser(){ const u = currentUser(); if(!u) return; if(!confirm('Удалить аккаунт и все данные?')) return; DB.users = DB.users.filter(x=>x.id!==u.id); localStorage.removeItem('notes_'+u.id); DB.session=null; showView('view-register'); alert('Аккаунт удалён') }
+
+/* ==================
+   Lock / Unlock
+   ================== */
+$('unlock-btn').addEventListener('click', ()=>{
+  const u = currentUser(); if(!u){ showView('view-register'); return; }
+  // default: unlock to home (unless user wants password)
+  showView('view-home'); renderUser();
+});
+$('enter-pass').addEventListener('click', ()=>{ showWindow('win-pass'); });
+$('cancel-pass').addEventListener('click', ()=>{ closeWindow('win-pass'); });
+$('ok-pass').addEventListener('click', async ()=>{
+  const p = $('prompt-pass').value; const u = currentUser(); if(!u){ alert('Нет сессии'); closeWindow('win-pass'); showView('view-register'); return; }
+  const ph = await sha256Hex(p + u.salt);
+  if(ph === u.passHash){ closeWindow('win-pass'); showView('view-home'); renderUser(); }
+  else alert('Неверный пароль');
+});
+
+/* ===========================
+   Windows management & close
+   =========================== */
+function openWindow(id){
+  showWindow(id);
+  // create task icon in taskbar (desktop only)
+  updateTaskbar();
+}
+function closeAppByBtn(el){
+  const winId = el.dataset.win;
+  closeWindow(winId);
+}
+document.querySelectorAll('.close-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{ const id = btn.dataset.win; closeWindow(id); });
+});
+
+/* Taskbar: show icons for open windows (desktop) */
+function updateTaskbar(){
+  const tb = $('taskbar'); tb.innerHTML = '';
+  if(isMobile()) return;
+  document.querySelectorAll('.window.show').forEach(win=>{
+    const id = win.id;
+    const t = document.createElement('div'); t.className='task'; t.title = id; t.textContent = id.replace('win-','').slice(0,2).toUpperCase();
+    t.addEventListener('click', ()=>{ // focus toggle
+      if(win.classList.contains('show')){ win.classList.remove('show'); } else { win.classList.add('show'); }
+    });
+    tb.appendChild(t);
+  });
+}
+
+/* Close animation only on desktop: handled by CSS hover transition (close-btn) and by JS visibility rule */
+function applyCloseVisibility(){
+  // show close buttons only on desktop (redundant with CSS, but ensure)
+  const visible = !isMobile();
+  document.querySelectorAll('.close-btn').forEach(b=>{ b.style.display = visible ? 'flex' : 'none'; });
+}
+applyCloseVisibility();
+window.addEventListener('resize', ()=>{ applyCloseVisibility(); updateTaskbar(); });
+
+/* =====================
+   Calculator logic
+   ===================== */
+let calcVal = '';
+document.querySelectorAll('.btn-calc').forEach(b=> b.addEventListener('click', ()=>{ calcVal += b.textContent; $('calc-display').value = calcVal; }));
+$('calc-eq').addEventListener('click', ()=>{ try{ const res = eval(calcVal); $('calc-display').value = String(res); calcVal = String(res); }catch(e){ alert('Ошибка вычисления') } });
+
+/* =========================
+   Settings menu handling
+   ========================= */
+document.querySelectorAll('.menu-btn').forEach(b=> b.addEventListener('click', ()=> {
+  const sec = b.dataset.section; const cont = $('settings-content');
+  if(sec === 'account'){
+    const u = currentUser();
+    cont.innerHTML = `<div><strong>Имя:</strong> ${u?u.name:'-'}</div>
+      <div style="margin-top:8px"><strong>Аватар:</strong><div style='width:56px;height:56px;border-radius:50%;background:${u?u.color:'#666'};margin-top:6px'></div></div>
+      <div style='margin-top:12px'><button id='btn-logout'>Выйти</button> <button id='btn-del'>Удалить аккаунт</button></div>`;
+    cont.querySelector('#btn-logout').addEventListener('click', ()=>{ logout(); showView('view-login'); });
+    cont.querySelector('#btn-del').addEventListener('click', ()=>{ deleteCurrentUser(); });
+  }
+  if(sec === 'walls'){
+    cont.innerHTML = `<div class="muted">Выберите обои (5)</div><div style='display:flex;gap:8px;margin-top:8px' id='wall-list'></div>`;
+    const list = ['linear-gradient(180deg,#071229,#0b2240)','linear-gradient(180deg,#0b2d12,#052)','linear-gradient(180deg,#35123a,#6b2b7f)','linear-gradient(180deg,#2a2a72,#0f9)','linear-gradient(180deg,#3a0b0b,#2a0b2b)'];
+    const wrap = cont.querySelector('#wall-list');
+    list.forEach(s=>{ const el = document.createElement('div'); el.style.width='80px'; el.style.height='120px'; el.style.borderRadius='8px'; el.style.background=s; el.style.cursor='pointer'; el.addEventListener('click', ()=>{ document.body.style.background = s; alert('Обои установлены'); }); wrap.appendChild(el); });
+  }
+  if(sec === 'system'){
+    cont.innerHTML = `<div class="muted">Системная папка</div><div style='margin-top:8px'><div style='display:flex;align-items:center;gap:10px'><div style='width:46px;height:46px;border-radius:8px;background:#0b2a44;display:flex;align-items:center;justify-content:center'>📁</div><div>Системная папка</div></div><div style='margin-top:12px'><button id='del-folder'>Удалить папку</button></div></div>`;
+    cont.querySelector('#del-folder').addEventListener('click', ()=>{ if(confirm('Удалить системную папку? Это выведет экран регистрации и входа.')){ DB.session = null; showView('view-register'); }});
+  }
+  if(sec === 'updates'){
+    const last = localStorage.getItem('webos_last_update_v3') || '2025-01-01';
+    const now = '2025-08-01';
+    cont.innerHTML = `<div><strong>Последнее обновление:</strong> ${last}</div><div style='margin-top:8px'><strong>Текущая версия:</strong> ${now}</div>`;
+  }
+  if(sec === 'password'){
+    // allow setting/removing screen password (we will store hashed password in user's passHash by re-hashing with salt)
+    const u = currentUser();
+    if(!u){ cont.innerHTML = '<div>Войдите в аккаунт чтобы настроить пароль</div>'; return; }
+    cont.innerHTML = `<div><label>Новый пароль</label><input id='set-pass' type='password'></div><div style='margin-top:8px'><button id='save-pass'>Сохранить</button> <button id='remove-pass'>Удалить пароль</button></div><div class="muted" style="margin-top:8px">Пароль хранится в хешированном виде (SHA-256 + соль)</div>`;
+    cont.querySelector('#save-pass').addEventListener('click', async ()=>{
+      const p = cont.querySelector('#set-pass').value; if(!p){ alert('Введите пароль'); return; }
+      u.salt = utils.randHex(8); u.passHash = await sha256Hex(p + u.salt); DB.users = DB.users.map(x=>x.id===u.id?u:x); alert('Пароль установлен'); });
+    cont.querySelector('#remove-pass').addEventListener('click', ()=>{ if(!confirm('Удалить пароль экрана?')) return; // cannot truly remove without password, but we reset to random hash
+      const tmp = Math.random().toString(36); u.salt = utils.randHex(8); sha256Hex(tmp+u.salt).then(h=>{ u.passHash=h; DB.users = DB.users.map(x=>x.id===u.id?u:x); alert('Пароль удалён (сброшен)'); }); });
+  }
+}));
+
+/* ============================
+   Store (install notes app)
+   ============================ */
+const APPS = [{id:'notes', title:'Заметки', desc:'Простые заметки, привязаны к аккаунту'}];
+function renderStore(){ const out = $('store-list'); out.innerHTML = ''; APPS.forEach(a=>{ const div = document.createElement('div'); div.style.padding='8px'; div.style.borderRadius='8px'; div.style.marginBottom='8px'; div.style.background='rgba(255,255,255,0.02)'; div.innerHTML = `<div style='font-weight:700'>${a.title}</div><div class='muted' style='font-size:13px'>${a.desc}</div><div style='margin-top:8px'><button data-install='${a.id}'>Установить</button></div>`; out.appendChild(div);}); renderInstalled(); }
+document.addEventListener('click', e=>{ if(e.target.dataset.install){ const id = e.target.dataset.install; const arr = DB.installed; if(!arr.includes(id)) arr.push(id); DB.installed = arr; renderStore(); alert('Установлено '+id); } });
+function renderInstalled(){ const out = $('installed-list'); out.innerHTML = ''; DB.installed.forEach(id=>{ const b = document.createElement('div'); b.style.marginBottom='6px'; const btn = document.createElement('button'); btn.textContent = id; btn.addEventListener('click', ()=>{ if(id==='notes'){ openWindow('win-notes'); loadNotes(); } }); b.appendChild(btn); out.appendChild(b); }); }
+
+/* ===========================
+   Notes app (per-user)
+   =========================== */
+function loadNotes(){
+  const u = currentUser(); if(!u){ alert('Войдите'); return; }
+  const key = 'notes_'+u.id; const arr = JSON.parse(localStorage.getItem(key)||'[]'); const list = $('notes-list'); list.innerHTML='';
+  arr.forEach((n, idx)=>{ const el = document.createElement('div'); el.className='note'; el.textContent = n.title || '(без названия)'; el.addEventListener('click', ()=>{ $('note-title').value = n.title; $('note-body').value = n.body; $('save-note').dataset.idx = idx; }); list.appendChild(el); });
+}
+$('new-note').addEventListener('click', ()=>{ $('note-title').value=''; $('note-body').value=''; delete $('save-note').dataset.idx; });
+$('save-note').addEventListener('click', ()=>{ const u = currentUser(); if(!u){ alert('Войдите'); return; } const key = 'notes_'+u.id; const arr = JSON.parse(localStorage.getItem(key)||'[]'); const idx = $('save-note').dataset.idx; const obj = {title:$('note-title').value, body:$('note-body').value}; if(idx===undefined) arr.push(obj); else arr[idx] = obj; localStorage.setItem(key, JSON.stringify(arr)); loadNotes(); alert('Сохранено'); });
+
+/* =========================
+   Admin panel (ban users)
+   ========================= */
+function renderAdmin(){
+  const cont = $('admin-accounts'); cont.innerHTML='';
+  DB.users.forEach(u=>{
+    const div = document.createElement('div'); div.style.padding='8px'; div.style.borderRadius='8px'; div.style.marginBottom='8px'; div.style.background='rgba(255,255,255,0.02)';
+    div.innerHTML = `<div style='display:flex;align-items:center;gap:10px'><div style='width:48px;height:48px;border-radius:50%;background:${u.color}'></div><div style='flex:1'>${u.name}<div class='muted' style='font-size:12px'>id:${u.id}</div></div><div><button data-ban='${u.id}'>Бан</button></div></div>`;
+    cont.appendChild(div);
+  });
+}
+document.addEventListener('click', e=>{ if(e.target.dataset.ban){ const id = Number(e.target.dataset.ban); const reason = prompt('Причина бана'); const minutes = prompt('На сколько минут (0 = навсегда)'); if(minutes===null) return; const m = Number(minutes); const until = m>0 ? Date.now() + m*60*1000 : 9999999999999; DB.users = DB.users.map(u => u.id===id ? ({...u, bannedUntil:until, banReason:reason}) : u); renderAdmin(); alert('Пользователь забанен'); } });
+
+/* change admin password (hash) */
+$('save-admin-pass').addEventListener('click', async ()=>{
+  const p = $('admin-pass').value; if(!p){ alert('Пусто — без изменений'); return; }
+  DB.adminHash = await sha256Hex(p); $('admin-pass').value=''; alert('Пароль администратора изменён');
+});
+
+/* admin protection on opening */
+document.querySelector('[data-app="admin"]').addEventListener('click', async ()=>{
+  const attempt = prompt('Введите пароль администратора'); if(attempt===null) return;
+  const h = await sha256Hex(attempt);
+  if(h !== DB.adminHash){ alert('Неверный пароль'); return; }
+  renderAdmin(); openWindow('win-admin');
+});
+
+/* open windows (app icons) */
+document.querySelectorAll('.appcard').forEach(el=> el.addEventListener('click', ()=> {
+  const app = el.dataset.app;
+  if(app==='calculator') openWindow('win-calc');
+  if(app==='settings') openWindow('win-settings');
+  if(app==='store'){ renderStore(); openWindow('win-store'); }
+  if(app==='admin'){ /* handled above*/ }
+}));
+
+/* when opening windows ensure close button animates (CSS) and update taskbar */
+document.querySelectorAll('.window').forEach(w=>{
+  // Add event: doubleclick outside to close handled later
+});
+
+/* generic close buttons (already wired by dataset) */
+document.querySelectorAll('.close-btn').forEach(btn=> btn.addEventListener('click', ()=> {
+  const id = btn.dataset.win; closeWindow(id);
+}));
+
+/* ===========================
+   Phone navigation handlers
+   =========================== */
+$('phone-home').addEventListener('click', ()=> { showView('view-home'); });
+$('phone-back').addEventListener('click', ()=> { /* simple: go to lock */ showView('view-lock'); });
+$('phone-recent').addEventListener('click', ()=> { alert('Недавние приложения (демо)'); });
+
+/* ===========================
+   Initial render & session restore
+   =========================== */
+function renderUser(){
+  const u = currentUser();
+  if(!u){ $('user-name').textContent = 'Гость'; $('user-avatar').style.background = '#666'; return; }
+  $('user-name').textContent = u.name; $('user-avatar').style.background = u.color;
+  // update installed list and taskbar
+  renderInstalled(); updateTaskbar();
+}
+(function init(){
+  renderUser();
+  if(DB.session) showView('view-lock'); else showView('view-register');
+})();
+
+/* small UX: dblclick closes windows */
+document.addEventListener('dblclick', ()=> document.querySelectorAll('.window').forEach(w=> w.classList.remove('show')));
+
+/* show/hide close buttons depending on device initial */
+function refreshCloseButtons(){
+  document.querySelectorAll('.close-btn').forEach(b => { b.style.display = isMobile() ? 'none' : 'flex'; });
+}
+refreshCloseButtons(); window.addEventListener('resize', ()=> { refreshCloseButtons(); updateTaskbar(); });
+
+/* small note: ensure when deleting system folder we clear session */
+window.deleteSystemFolder = function(){ if(confirm('Удалить системную папку?')){ DB.session = null; showView('view-register'); } };
+
+</script>
+</body>
+</html>
